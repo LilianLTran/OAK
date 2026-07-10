@@ -1,0 +1,48 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-cream text-plum font-body antialiased;
+  }
+  h1, h2, h3 {
+    @apply font-display;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply btn bg-teal text-white shadow-[0_8px_20px_-8px_rgba(1,98,115,0.6)] hover:bg-plum hover:shadow-[0_8px_24px_-8px_rgba(74,37,69,0.55)];
+  }
+  .btn-secondary {
+    @apply btn bg-blossom text-plum hover:bg-blossom/80;
+  }
+  .btn-ghost {
+    @apply btn border border-plum/20 text-plum hover:border-gold hover:bg-gold/10;
+  }
+  .card {
+    @apply bg-white rounded-2xl shadow-card ring-1 ring-plum/5 p-6;
+  }
+  .card-luxe {
+    @apply bg-white rounded-3xl shadow-luxe ring-1 ring-gold/20 p-8;
+  }
+  .input {
+    @apply w-full rounded-xl border border-lilac/60 bg-white px-3.5 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-teal/40 focus:border-teal;
+  }
+  .label {
+    @apply block text-xs font-semibold uppercase tracking-wide text-plum-soft mb-1.5;
+  }
+  .chip {
+    @apply inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold;
+  }
+  .eyebrow {
+    @apply inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide3 text-gold;
+  }
+  .divider-gold {
+    @apply h-px w-12 bg-gold-line;
+  }
+}

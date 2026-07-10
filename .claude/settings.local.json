@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//private/tmp/claude-501/**)",
+      "Read(//private/var/folders/**)",
+      "Skill(run)",
+      "Skill(run:*)",
+      "Bash(curl -sf http://localhost:5174)",
+      "Bash(npx --no-install playwright --version)",
+      "Bash(find / -maxdepth 4 -iname \"*chromium-cli*\")",
+      "Bash(npm ls *)",
+      "Bash(timeout 100 npm install -D playwright)",
+      "Bash(npm install *)",
+      "Bash(npx playwright *)",
+      "Bash(node /private/tmp/claude-501/-Users-linhluu-Work-MyProjects-OAK-nailbloom/b2288cd1-3d8d-4591-a726-000d333511c1/scratchpad/shot.mjs)",
+      "Bash(node /Users/linhluu/Work/MyProjects/OAK/nailbloom/frontend/.shot.mjs)",
+      "Bash(node .shot2.mjs)",
+      "Bash(node -e ' *)",
+      "Bash(pkill -f \"vite\")",
+      "Bash(npm uninstall *)"
+    ]
+  }
+}

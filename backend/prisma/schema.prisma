@@ -1,0 +1,258 @@
+// NailBloom — marketplace for independent nail technicians.
+// Normalized schema. Anti-double-booking is enforced at THREE levels:
+//   1. Postgres EXCLUDE constraints (see prisma/constraints.sql) — hard guarantee
+//   2. Serializable transaction + overlap re-check in the booking service
+//   3. Slot engine never offers taken slots
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CUSTOMER
+  TECHNICIAN
+  ADMIN
+}
+
+enum LocationType {
+  SALON
+  MOBILE
+  BOTH
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
+enum PaymentStatus {
+  REQUIRES_PAYMENT
+  PAID
+  REFUNDED
+  FAILED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  phone        String?
+  role         Role     @default(CUSTOMER)
+  isSuspended  Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  technicianProfile TechnicianProfile?
+  appointments      Appointment[]       @relation("CustomerAppointments")
+  reviews           Review[]
+  favorites         FavoriteTechnician[]
+}
+
+model TechnicianProfile {
+  id             String       @id @default(cuid())
+  userId         String       @unique
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bio            String       @default("")
+  salonName      String?
+  locationType   LocationType @default(SALON)
+  address        String       @default("")
+  city           String       @default("")
+  state          String       @default("")
+  zipCode        String       @default("")
+  country        String       @default("US")
+  latitude       Float?
+  longitude      Float?
+  profilePhotoUrl String?
+  coverImageUrl  String?
+  yearsExperience Int         @default(0)
+  certifications String[]     @default([])
+  timezone       String       @default("America/Los_Angeles")
+  // Booking behaviour
+  autoApprove    Boolean      @default(true) // false => bookings start as PENDING
+  bufferMinutes  Int          @default(0)    // gap enforced between appointments
+  slotIntervalMinutes Int     @default(30)   // granularity of offered start times
+  // Denormalized rating cache (recomputed on every review write)
+  avgRating      Float        @default(0)
+  reviewCount    Int          @default(0)
+  isPublished    Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  services        Service[]
+  portfolioImages PortfolioImage[]
+  schedules       AvailabilitySchedule[]
+  blockedTimes    BlockedTime[]
+  appointments    Appointment[]
+  reviews         Review[]
+  favoritedBy     FavoriteTechnician[]
+
+  @@index([city, state])
+  @@index([isPublished])
+}
+
+model Service {
+  id              String   @id @default(cuid())
+  technicianId    String
+  technician      TechnicianProfile @relation(fields: [technicianId], references: [id], onDelete: Cascade)
+  name            String
+  description     String   @default("")
+  durationMinutes Int
+  priceCents      Int
+  category        String   // e.g. "Manicure", "Pedicure", "Nail Art", "Extensions"
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  addOns              ServiceAddOn[]
+  appointmentServices AppointmentService[]
+
+  @@index([technicianId])
+  @@index([category])
+}
+
+model ServiceAddOn {
+  id              String  @id @default(cuid())
+  serviceId       String
+  service         Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  name            String
+  priceCents      Int
+  durationMinutes Int     @default(0)
+
+  @@index([serviceId])
+}
+
+model PortfolioImage {
+  id           String            @id @default(cuid())
+  technicianId String
+  technician   TechnicianProfile @relation(fields: [technicianId], references: [id], onDelete: Cascade)
+  url          String
+  caption      String?
+  sortOrder    Int               @default(0)
+  createdAt    DateTime          @default(now())
+
+  @@index([technicianId])
+}
+
+// A recurring weekly working window. Multiple windows per weekday are allowed;
+// the gap between two windows on the same day models a break
+// (e.g. 09:00–12:00 and 13:00–18:00 => 12:00–13:00 lunch break).
+model AvailabilitySchedule {
+  id           String            @id @default(cuid())
+  technicianId String
+  technician   TechnicianProfile @relation(fields: [technicianId], references: [id], onDelete: Cascade)
+  weekday      Int               // 0 = Sunday … 6 = Saturday
+  startMinutes Int               // minutes since local midnight, e.g. 540 = 09:00
+  endMinutes   Int               // e.g. 1080 = 18:00
+
+  @@index([technicianId, weekday])
+}
+
+// One-off unavailability: vacation days, blocked dates, personal time.
+model BlockedTime {
+  id           String            @id @default(cuid())
+  technicianId String
+  technician   TechnicianProfile @relation(fields: [technicianId], references: [id], onDelete: Cascade)
+  startAt      DateTime
+  endAt        DateTime
+  reason       String?
+  createdAt    DateTime          @default(now())
+
+  @@index([technicianId, startAt])
+}
+
+model Appointment {
+  id             String            @id @default(cuid())
+  customerId     String
+  customer       User              @relation("CustomerAppointments", fields: [customerId], references: [id])
+  technicianId   String
+  technician     TechnicianProfile @relation(fields: [technicianId], references: [id])
+  startAt        DateTime
+  endAt          DateTime          // startAt + service durations (+ add-ons); buffer is applied by the slot engine
+  status         AppointmentStatus @default(PENDING)
+  totalCents     Int
+  customerNote   String?
+  cancellationReason String?
+  cancelledBy    Role?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  services AppointmentService[]
+  payment  Payment?
+  review   Review?
+
+  @@index([technicianId, startAt])
+  @@index([customerId, startAt])
+  @@index([status])
+}
+
+// Snapshot of the booked service at booking time (name/price/duration are
+// copied so later edits to the Service don't rewrite history).
+model AppointmentService {
+  id              String      @id @default(cuid())
+  appointmentId   String
+  appointment     Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  serviceId       String
+  service         Service     @relation(fields: [serviceId], references: [id])
+  name            String
+  priceCents      Int
+  durationMinutes Int
+  addOns          Json? // [{ name, priceCents, durationMinutes }]
+
+  @@index([appointmentId])
+}
+
+model Review {
+  id            String            @id @default(cuid())
+  appointmentId String            @unique
+  appointment   Appointment       @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  customerId    String
+  customer      User              @relation(fields: [customerId], references: [id])
+  technicianId  String
+  technician    TechnicianProfile @relation(fields: [technicianId], references: [id])
+  rating        Int               // 1..5 (validated in service layer)
+  comment       String            @default("")
+  photoUrls     String[]          @default([])
+  isHidden      Boolean           @default(false) // admin moderation
+  createdAt     DateTime          @default(now())
+
+  @@index([technicianId])
+}
+
+model Payment {
+  id                    String        @id @default(cuid())
+  appointmentId         String        @unique
+  appointment           Appointment   @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  amountCents           Int
+  currency              String        @default("usd")
+  status                PaymentStatus @default(REQUIRES_PAYMENT)
+  stripePaymentIntentId String?       // set by the (placeholder) Stripe integration
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+}
+
+model FavoriteTechnician {
+  id           String            @id @default(cuid())
+  customerId   String
+  customer     User              @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  technicianId String
+  technician   TechnicianProfile @relation(fields: [technicianId], references: [id], onDelete: Cascade)
+  createdAt    DateTime          @default(now())
+
+  @@unique([customerId, technicianId])
+}
+
+model PlatformSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
