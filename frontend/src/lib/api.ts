@@ -1,5 +1,9 @@
 /** Tiny typed fetch wrapper with JWT injection and API error unwrapping. */
 
+// In dev, left empty so requests hit the Vite proxy (see vite.config.ts).
+// In prod (Vercel), set VITE_API_URL to the deployed backend's origin.
+const API_ORIGIN = import.meta.env.VITE_API_URL ?? '';
+
 const TOKEN_KEY = 'nailbloom.token';
 
 export function getToken(): string | null {
@@ -22,7 +26,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const res = await fetch(`/api${path}`, { ...options, headers });
+  const res = await fetch(`${API_ORIGIN}/api${path}`, { ...options, headers });
   if (res.status === 204) return undefined as T;
 
   const data = await res.json().catch(() => null);
