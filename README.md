@@ -11,20 +11,27 @@ An Airbnb-style marketplace connecting customers with independent nail technicia
 Prereqs: Node 18+, Docker (or a local PostgreSQL 14+).
 
 ```bash
-# 1. Database
-docker compose up -d
+cd backend && cp .env.example .env && cd ..
 
-# 2. Backend
-cd backend
-cp .env.example .env
-npm install
-npm run db:setup        # prisma db push + EXCLUDE constraints + demo seed
-npm run dev             # API on http://localhost:4000
+# 1. Database + backend (both in Docker)
+docker compose up -d --build
+docker compose exec backend npm run db:setup   # prisma db push + EXCLUDE constraints + demo seed
+                                                 # API now on http://localhost:4000
 
-# 3. Frontend (new terminal)
+# 2. Frontend (new terminal)
 cd frontend
 npm install
 npm run dev             # App on http://localhost:5173 (proxies /api)
+```
+
+Prefer running the backend outside Docker for faster iteration (auto-reload on save)? Skip `docker compose up -d --build` for the backend and instead run only the db service plus the local dev server:
+
+```bash
+docker compose up -d db
+cd backend
+npm install
+npm run db:setup
+npm run dev             # API on http://localhost:4000
 ```
 
 ### Demo accounts (password `Password123!`)

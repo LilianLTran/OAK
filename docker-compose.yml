@@ -1,4 +1,3 @@
-version: "3.9"
 services:
   db:
     image: postgres:16-alpine
@@ -16,6 +15,22 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  backend:
+    build: ./backend
+    container_name: oak-backend
+    env_file:
+      - ./backend/.env
+    environment:
+      # Overrides the value in backend/.env — inside the compose network,
+      # Postgres is reachable at the service name "db", not localhost.
+      DATABASE_URL: postgresql://oak:oak@db:5432/oak?schema=public
+    ports:
+      - "4000:4000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   oak_pgdata:
